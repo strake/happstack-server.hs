@@ -1,5 +1,5 @@
 {-# LANGUAGE BangPatterns, CPP, ScopedTypeVariables #-}
-module Happstack.Server.Internal.Listen(listen, listen',listenOn,listenOnIPv4) where
+module Happstack.Server.Internal.Listen(listen, listen',listenOn,listenOnIP) where
 
 import Happstack.Server.Internal.Types          (Conf(..), Request, Response)
 import Happstack.Server.Internal.Handler        (request)
@@ -22,54 +22,46 @@ import System.Posix.Signals
 #endif
 -}
 import System.Log.Logger (Priority(..), logM)
+import Util ((<₪>), altMap)
+
 log':: Priority -> String -> IO ()
 log' = logM "Happstack.Server.HTTP.Listen"
 
-
-{-
-   Network.listenOn binds randomly to IPv4 or IPv6 or both,
-   depending on system and local settings.
-   Lets make it use IPv4 only for now.
--}
 
 listenOn :: Int -> IO Socket.Socket
 listenOn portm = do
     proto <- getProtocolNumber "tcp"
     E.bracketOnError
-        (Socket.socket Socket.AF_INET Socket.Stream proto)
-        (Socket.close)
-        (\sock -> do
-            Socket.setSocketOption sock Socket.ReuseAddr 1
-            Socket.bind sock (Socket.SockAddrInet (fromIntegral portm) iNADDR_ANY)
-            Socket.listen sock (max 1024 Socket.maxListenQueue)
-            return sock
-        )
+        (Socket.socket Socket.AF_INET6 Socket.Stream proto)
+        (Socket.close) $ \ sock -> sock <$ do
+      Socket.setSocketOption sock Socket.ReuseAddr 1
+      Socket.bind sock (Socket.SockAddrInet (fromIntegral portm) iNADDR_ANY)
+      Socket.listen sock (Socket.maxListenQueue)
 
-listenOnIPv4 :: String  -- ^ IP address to listen on (must be an IP address not a host name)
-             -> Int     -- ^ port number to listen on
-             -> IO Socket.Socket
-listenOnIPv4 ip portm = do
+listenOnIP :: String  -- ^ IP address to listen on (must be an IP address not a host name)
+           -> Int     -- ^ port number to listen on
+           -> IO Socket.Socket
+listenOnIP ip portm = do
     proto <- getProtocolNumber "tcp"
-    hostAddr <- inet_addr ip
+    sockAddr <- inet_addr ip <₪> \ case
+        Left hostAddr -> Socket.SockAddrInet portm' hostAddr
+        Right (hostAddr, flowInfo, scopeId) -> Socket.SockAddrInet6 portm' flowInfo hostAddr scopeId
     E.bracketOnError
-        (Socket.socket Socket.AF_INET Socket.Stream proto)
-        (Socket.close)
-        (\sock -> do
-            Socket.setSocketOption sock Socket.ReuseAddr 1
-            Socket.bind sock (Socket.SockAddrInet (fromIntegral portm) hostAddr)
-            Socket.listen sock (max 1024 Socket.maxListenQueue)
-            return sock
-        )
+        (Socket.socket Socket.AF_INET6 Socket.Stream proto)
+        (Socket.close) $ \ sock -> sock <$ do
+        Socket.setSocketOption sock Socket.ReuseAddr 1
+        Socket.bind sock sockAddr
+        Socket.listen sock (max 1024 Socket.maxListenQueue)
+  where portm' = fromIntegral portm
 
-inet_addr :: String -> IO Socket.HostAddress
+inet_addr :: String -> IO (Either Socket.HostAddress (Socket.HostAddress6, Socket.FlowInfo, Socket.ScopeID))
 inet_addr ip = do
-  addrInfos <- Socket.getAddrInfo (Just Socket.defaultHints) (Just ip) (Just "tcp")
+  addrInfos <- Socket.getAddrInfo (Just Socket.defaultHints) (Just ip) Nothing
   let getHostAddress addrInfo = case Socket.addrAddress addrInfo of
-        Socket.SockAddrInet _ hostAddress -> Just hostAddress
+        Socket.SockAddrInet _ hostAddress -> Just (Left hostAddress)
+        Socket.SockAddrInet6 _ flowInfo hostAddress scopeId -> Just (Right (hostAddress, flowInfo, scopeId))
         _ -> Nothing
-  maybe (fail "inet_addr: no HostAddress") pure
-    . Maybe.listToMaybe
-    $ Maybe.mapMaybe getHostAddress addrInfos
+  maybe (fail "inet_addr: no HostAddress") pure $ altMap getHostAddress addrInfos
 
 iNADDR_ANY :: Socket.HostAddress
 iNADDR_ANY = 0

@@ -73,7 +73,7 @@ import Happstack.Server.SimpleHTTP       (simpleHTTP
                                          , simpleHTTPWithSocket
                                          , simpleHTTPWithSocket'
                                          , bindPort
-                                         , bindIPv4
+                                         , bindIP
                                          , parseConfig
                                          , waitForTermination
                                          )

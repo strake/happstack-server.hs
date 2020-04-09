@@ -17,17 +17,13 @@ source-repository head
     type:     git
     location: https://github.com/Happstack/happstack-server.git
 
-Flag template_haskell
-    Description: Template Haskell is available on this system
-    Default: True
-    Manual: False
-
 flag network-uri
     description: Get Network.URI from the network-uri package
     default: True
 
 Library
   Default-language:    Haskell2010
+  Default-extensions:  LambdaCase
   Exposed-modules:
                        Happstack.Server
                        Happstack.Server.Auth
@@ -63,7 +59,6 @@ Library
   Other-modules:
                        Happstack.Server.Internal.Clock
                        Happstack.Server.Internal.LazyLiner
-                       Happstack.Server.Internal.SocketTH
                        Happstack.Server.SURI.ParseURI
                        Paths_happstack_server
 
@@ -101,12 +96,9 @@ Library
                        transformers-base      >= 0.4   && < 0.5,
                        transformers-compat    >= 0.3   && < 0.7,
                        utf8-string            >= 0.3.4 && < 1.1,
+                       util                   >= 0.1.17 && < 0.2,
                        xhtml,
                        zlib
-
-  if flag(template_haskell)
-    cpp-options:       -DTEMPLATE_HASKELL
-    other-extensions:  TemplateHaskell
 
   hs-source-dirs:      src
 

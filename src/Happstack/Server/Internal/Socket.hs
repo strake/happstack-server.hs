@@ -1,7 +1,3 @@
-{-# LANGUAGE CPP #-}
-#ifdef TEMPLATE_HASKELL
-{-# LANGUAGE TemplateHaskell #-}
-#endif
 module Happstack.Server.Internal.Socket
     ( acceptLite
     , sockAddrToPeer
@@ -9,10 +5,6 @@ module Happstack.Server.Internal.Socket
 
 import Data.List (intersperse)
 import Data.Word (Word32)
-#ifdef TEMPLATE_HASKELL
-import Happstack.Server.Internal.SocketTH(supportsIPv6)
-import Language.Haskell.TH.Syntax
-#endif
 
 import qualified Network.Socket as S
   ( Socket(..)
@@ -56,45 +48,7 @@ acceptLite sock = do
   return (sock', peer, port)
 
 sockAddrToPeer ::  S.SockAddr -> (S.HostName, S.PortNumber)
-sockAddrToPeer addr =
-#ifdef TEMPLATE_HASKELL
-    $(if supportsIPv6
-         then
-         return $ CaseE (VarE (mkName "addr"))
-                    [ Match
-                         (ConP (mkName "S.SockAddrInet")
-                          [VarP (mkName "p"),VarP (mkName "ha")])
-                         (NormalB
-                            (TupE
-                                [(AppE (VarE (mkName "showHostAddress"))
-                                    (VarE (mkName "ha")))
-                                , VarE (mkName "p")
-                                ])) []
-                    , Match (ConP (mkName "S.SockAddrInet6")
-                            [VarP (mkName "p"),WildP,VarP (mkName "ha"),WildP])
-                         (NormalB
-                            (TupE
-                                [ (AppE
-                                    (VarE (mkName "showHostAddress6"))
-                                         (VarE (mkName "ha")))
-                                , VarE (mkName "p")
-                                ])) []
-                    , Match WildP
-                        (NormalB (AppE (VarE (mkName "error"))
-                            (LitE (StringL "Unsupported socket")))) []]
-         -- the above mess is the equivalent of this:
-         {-[| case addr of
-               (S.SockAddrInet p ha)        -> (showHostAddress  ha, p)
-               (S.SockAddrInet6 p _ ha _ )  -> (showHostAddress6 ha, p)
-               _                            -> error "Unsupported socket"
-           |]-}
-         else
-         [| case addr of
-              (S.SockAddrInet p ha)      -> (showHostAddress ha, p)
-              _                          -> error "Unsupported socket"
-         |])
-#else
-    case addr of
-        (S.SockAddrInet p ha)      -> (showHostAddress ha, p)
-        _                          -> error "Unsupported socket"
-#endif
+sockAddrToPeer = \ case
+    (S.SockAddrInet p ha)      -> (showHostAddress ha, p)
+    (S.SockAddrInet6 p _ ha _) -> (showHostAddress6 ha, p)
+    _                          -> error "Unsupported socket"
